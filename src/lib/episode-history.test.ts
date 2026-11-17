@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { downloadedEpisodes } from './episode-history';
+import { downloadedEpisodes, needsEpisodeDownload } from './episode-history';
 import type { HistoryEntry, Title } from './api/types';
 const series = 'https://player.pl/seriale-online/ukryta-prawda-odcinki,521';
 const titles: Title[] = [1, 2].map((number) => ({
@@ -69,4 +69,18 @@ test('keeps split parts distinct from a whole episode', () => {
 });
 test('isolates history from another remote server', () => {
 	assert.equal(status([entry({ parameters: { remote: 'other' } })]).size, 0);
+});
+
+test('skips equal or higher downloaded quality and allows upgrades', () => {
+	assert.equal(needsEpisodeDownload([1080], [1080]), false);
+	assert.equal(needsEpisodeDownload([2160], [1080]), false);
+	assert.equal(needsEpisodeDownload([720], [1080]), true);
+	assert.equal(needsEpisodeDownload([1080], [720, 2160]), true);
+});
+test('best available uses each episode maximum, including 720p-only episodes', () => {
+	assert.equal(needsEpisodeDownload([720], [], [360, 720]), false);
+	assert.equal(needsEpisodeDownload([720], [], [720, 1080]), true);
+	assert.equal(needsEpisodeDownload([1080], [], [720, 1080]), false);
+	assert.equal(needsEpisodeDownload([], [], [1080]), true);
+	assert.equal(needsEpisodeDownload([720], [], []), true);
 });

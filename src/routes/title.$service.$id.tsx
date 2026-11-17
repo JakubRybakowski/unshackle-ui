@@ -8,7 +8,7 @@ import Button from '$lib/components/Button';
 import Card from '$lib/components/Card';
 import ChipSelect from '$lib/components/ChipSelect';
 import EpisodePicker from '$lib/components/EpisodePicker';
-import { downloadedEpisodes } from '$lib/episode-history';
+import { downloadedEpisodes, needsEpisodeDownload } from '$lib/episode-history';
 import Icon from '$lib/components/Icon';
 import OptionForm, { type OptionValues } from '$lib/components/OptionForm';
 import Overlay from '$lib/components/Overlay';
@@ -279,14 +279,53 @@ function TitlePage() {
 	// means no marker.
 	const originalLangs = combined?.originalAudioLangs ?? [];
 
+	const [skipNotice, setSkipNotice] = useState('');
 	const start = useMutation({
-		mutationFn: () =>
-			api.download(
+		mutationFn: async () => {
+			setSkipNotice('');
+			let wanted = epSel;
+			if (episodic) {
+				const fresh = await history.refetch();
+				if (fresh.isError)
+					throw new Error('Cannot check download history. Refresh history and try again.');
+				const owned = downloadedEpisodes(
+					fresh.data?.history ?? [],
+					service,
+					titleId,
+					titles,
+					source
+				);
+				wanted = [];
+				for (const code of epSel) {
+					let available: number[] = [];
+					if (!qualitySel.length && owned.get(code)?.length) {
+						const current = await api.listTracks({
+							...coerce(svcFields, svcValues),
+							service,
+							title_id: titleId,
+							wanted: code,
+							profile: String(advanced.profile).trim() || undefined,
+							proxy: String(advanced.proxy).trim() || undefined,
+							no_proxy: advanced.no_proxy === true || undefined
+						});
+						available = current.video.map((v) => v.height).filter((h) => h > 0);
+					}
+					if (needsEpisodeDownload(owned.get(code), qualitySel.map(Number), available))
+						wanted.push(code);
+				}
+				const skipped = epSel.length - wanted.length;
+				if (skipped)
+					setSkipNotice(
+						`${skipped} episodes skipped: already downloaded at the requested or best available quality.`
+					);
+				if (!wanted.length) return false;
+			}
+			await api.download(
 				buildDownloadRequest(
 					{ service, title_id: titleId },
 					{
 						// Send only explicitly selected episodes.
-						wanted: epSel,
+						wanted,
 						quality: qualitySel,
 						vcodec: codecSel,
 						range: rangeSel,
@@ -297,8 +336,12 @@ function TitlePage() {
 					svcFields,
 					svcValues
 				)
-			),
-		onSuccess: () => navigate({ to: '/downloads' })
+			);
+			return true;
+		},
+		onSuccess: (started) => {
+			if (started) navigate({ to: '/downloads' });
+		}
 	});
 
 	return (
@@ -478,7 +521,7 @@ function TitlePage() {
 							Download
 						</h2>
 						<p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-							Click to pick tracks. An empty row uses the default next to its label.
+							Click to pick tracks. An empty row uses the default next to its label. Episodes already downloaded at the requested quality are skipped. Best available checks the maximum for each episode.
 						</p>
 						{combined ? (
 							<div className="mt-4 space-y-4">
@@ -559,7 +602,7 @@ function TitlePage() {
 										{start.isPending ? (
 											<>
 												<Icon name="loader" spin />
-												Starting…
+												Checking quality / starting…
 											</>
 										) : (
 											<>
@@ -606,6 +649,11 @@ function TitlePage() {
 							</div>
 						)}
 
+						{skipNotice && (
+							<p role="status" className="mt-4 text-sm text-emerald-700">
+								{skipNotice}
+							</p>
+						)}
 						{start.error && (
 							<div className="mt-4 flex items-start gap-2 text-sm text-red-600 dark:text-red-400">
 								<Icon name="alert" size={16} className="mt-0.5" />

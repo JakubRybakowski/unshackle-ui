@@ -54,3 +54,14 @@ export function downloadedEpisodes(
 	}
 	return result;
 }
+
+/** Unknown output quality is never sufficient evidence to skip a download. */
+export function needsEpisodeDownload(
+	owned: number[] | undefined,
+	requested: number[],
+	available: number[] = []
+): boolean {
+	if (!owned?.length) return true;
+	const targets = requested.length ? requested : available.length ? [Math.max(...available)] : [];
+	return !targets.length || targets.some((height) => !owned.some((existing) => existing >= height));
+}

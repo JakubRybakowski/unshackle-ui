@@ -8,7 +8,7 @@ import Button from '$lib/components/Button';
 import Card from '$lib/components/Card';
 import ChipSelect from '$lib/components/ChipSelect';
 import Icon from '$lib/components/Icon';
-import EpisodeAccessPicker from '$lib/components/EpisodeAccessPicker';
+import EpisodePicker from '$lib/components/EpisodePicker';
 import AvailabilityBadges from '$lib/components/AvailabilityBadges';
 import {
 	accessibleSelection,
@@ -373,12 +373,19 @@ function TitlePage() {
 					>
 						{episodic && episodeOptions.length > 0 && (
 							<Card className="p-5">
-								<EpisodeAccessPicker
-									titles={titles}
+								<EpisodePicker
+									titles={episodeTitles}
 									selected={selected}
 									onChange={setEpSel}
 									unseen={unseenCodes}
+									selectable={canSelectTitle}
+									renderStatus={(title) => <AvailabilityBadges title={title} />}
 								/>
+								{episodeTitles.some((title) => !canSelectTitle(title)) && (
+									<p className="mt-2 text-xs text-red-600">
+										{episodeTitles.filter((title) => !canSelectTitle(title)).length} without access
+									</p>
+								)}
 								<div className="mt-3 flex flex-wrap gap-3 text-xs">
 									<button
 										type="button"

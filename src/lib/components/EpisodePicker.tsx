@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import type { Title } from '../api/types';
 import { episodeGroups, toggleEpisodeGroup } from '../episode-picker';
 import { wantedCode } from '../tracks';
-import { useMask } from '../stores/incognito';
+import { useIncognito, useMask } from '../stores/incognito';
 
 export default function EpisodePicker({
 	titles,
@@ -20,6 +20,7 @@ export default function EpisodePicker({
 	renderStatus?: (title: Title) => ReactNode;
 }) {
 	const mask = useMask();
+	const incognito = useIncognito();
 	const groups = useMemo(() => episodeGroups(titles), [titles]);
 	const [query, setQuery] = useState('');
 	const [open, setOpen] = useState<Set<number>>(
@@ -35,7 +36,8 @@ export default function EpisodePicker({
 		<section aria-label="Episodes by season" className="space-y-3">
 			<div className="flex flex-wrap items-center gap-3 text-xs">
 				<h2 className="text-sm font-semibold">
-					Episodes · {groups.length} seasons · {picked.size} selected
+					Episodes · {titles.length} total · {groups.length}{' '}
+					{groups.length === 1 ? 'season' : 'seasons'} · {picked.size} selected
 				</h2>
 				<button type="button" onClick={() => onChange(allowed)} className="text-accent-600">
 					All
@@ -49,9 +51,6 @@ export default function EpisodePicker({
 					Clear
 				</button>
 			</div>
-			<p className="text-xs text-neutral-500">
-				Select episodes to download, or use All to select the entire series.
-			</p>
 			<input
 				aria-label="Search episodes"
 				placeholder="Find an episode or S01E02…"
@@ -59,7 +58,7 @@ export default function EpisodePicker({
 				onChange={(event) => setQuery(event.target.value)}
 				className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
 			/>
-			<div className="max-h-[620px] space-y-2 overflow-y-auto pr-1">
+			<div className="max-h-[560px] space-y-2 overflow-y-auto pr-1">
 				{groups.map(({ season, episodes }) => {
 					const visible = episodes.filter(
 						(t) => !search || `${wantedCode(t)} ${t.name}`.toLocaleLowerCase().includes(search)
@@ -72,7 +71,7 @@ export default function EpisodePicker({
 							key={season}
 							className="overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-700"
 						>
-							<div className="flex items-center gap-3 bg-neutral-50 px-3 py-3 dark:bg-neutral-800/50">
+							<div className="flex items-center gap-3 bg-neutral-50 px-3 py-2.5 dark:bg-neutral-800/50">
 								<input
 									type="checkbox"
 									aria-label={`Select season ${season}`}
@@ -113,7 +112,7 @@ export default function EpisodePicker({
 										return (
 											<label
 												key={code}
-												className={`grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-3 py-3 ${picked.has(code) ? 'bg-accent-50/60 dark:bg-accent-900/10' : ''}`}
+												className={`grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1 px-3 py-2 sm:grid-cols-[auto_minmax(0,1fr)_auto] ${picked.has(code) ? 'bg-accent-50/60 dark:bg-accent-900/10' : ''}`}
 											>
 												<input
 													type="checkbox"
@@ -129,19 +128,44 @@ export default function EpisodePicker({
 													}
 													className="h-4 w-4 accent-accent-600"
 												/>
-												<span className="min-w-0">
-													<span className="block font-mono text-xs text-neutral-500">
-														{code}
-														{unseen.has(code) && selectable(title) && (
-															<span className="ml-2 font-sans text-amber-700">New</span>
+												<span className="flex min-w-0 items-center gap-3">
+													{title.cover_url && !incognito && (
+														<img
+															src={title.cover_url}
+															loading="lazy"
+															decoding="async"
+															referrerPolicy="no-referrer"
+															alt=""
+															className="hidden h-11 w-[76px] shrink-0 rounded-md object-cover sm:block"
+														/>
+													)}
+													<span className="min-w-0">
+														<span className="block font-mono text-xs text-neutral-500">
+															{code}
+															{title.year && (
+																<span className="ml-2 font-sans text-neutral-400">
+																	{mask.year(title.year)}
+																</span>
+															)}
+															{unseen.has(code) && selectable(title) && (
+																<span className="ml-2 font-sans text-amber-700">New</span>
+															)}
+														</span>
+														<span className="mt-0.5 block truncate text-sm">
+															{mask.title(title.name || `Episode ${title.number}`)}
+														</span>
+														{title.description && (
+															<span
+																className="mt-0.5 block truncate text-xs text-neutral-500"
+																title={mask.text(title.description)}
+															>
+																{mask.text(title.description)}
+															</span>
 														)}
-													</span>
-													<span className="mt-0.5 block truncate text-sm">
-														{mask.title(title.name || `Episode ${title.number}`)}
 													</span>
 												</span>
 												{renderStatus && (
-													<span className="col-start-2 flex flex-wrap gap-2">
+													<span className="col-start-2 flex flex-wrap gap-1 empty:hidden sm:col-start-3 sm:row-start-1 sm:max-w-60 sm:justify-end">
 														{renderStatus(title)}
 													</span>
 												)}

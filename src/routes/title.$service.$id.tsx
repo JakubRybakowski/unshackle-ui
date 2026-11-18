@@ -9,6 +9,7 @@ import Card from '$lib/components/Card';
 import ChipSelect from '$lib/components/ChipSelect';
 import Icon from '$lib/components/Icon';
 import EpisodePicker from '$lib/components/EpisodePicker';
+import TrackOverview from '$lib/components/TrackOverview';
 import AvailabilityBadges from '$lib/components/AvailabilityBadges';
 import {
 	accessibleSelection,
@@ -329,12 +330,14 @@ function TitlePage() {
 				<h1 className="text-2xl font-semibold tracking-tight">{mask.title(header)}</h1>
 				{!episodic && first && <AvailabilityBadges title={first} />}
 				{first?.type && <Badge tone="accent">{episodic ? 'series' : first.type}</Badge>}
-				{first?.year && (
+				{!episodic && first?.year && (
 					<span className="text-sm text-neutral-500 dark:text-neutral-400">{first.year}</span>
 				)}
 			</div>
-			<p className="mt-1 font-mono text-xs text-neutral-400 dark:text-neutral-500">
-				{mask.service(service)} · {mask.id(titleId)}
+			<p className="mt-1 truncate text-xs text-neutral-500">
+				{mask.service(service)}
+				{first?.language && ` · ${first.language.toUpperCase()}`}
+				{episodic && ` · ${episodeOptions.length} episodes`}
 			</p>
 			{/* Browse matched this provider to more than one service (NF/NF_PR, HULU/HULUJP);
 			    offer the runners-up rather than making the user go back and search. */}
@@ -366,13 +369,192 @@ function TitlePage() {
 				</Card>
 			) : (
 				<>
-					<div
-						className={`mt-6 grid gap-6 ${
-							episodic && episodeOptions.length > 0 ? 'lg:grid-cols-2' : ''
-						}`}
-					>
+					<div className="mt-4 space-y-3">
+						<Card className="p-4">
+							<div className="flex flex-wrap items-center justify-between gap-2">
+								<h2 className="text-sm font-semibold">Available tracks</h2>
+								{episodic && (
+									<button
+										type="button"
+										onClick={loadSelection}
+										disabled={tracks.isPending || refreshStatus.isPending || !selected.length}
+										className="text-xs font-medium text-accent-600 disabled:opacity-40"
+									>
+										{tracks.isPending ? 'Loading tracks…' : 'Refresh selected tracks'}
+									</button>
+								)}
+							</div>
+							{first && !canSelectTitle(first) ? (
+								<p role="status" className="mt-2 text-sm text-red-600">
+									This account does not have access to this title.
+								</p>
+							) : tracks.isPending ? (
+								<p role="status" className="mt-3 flex items-center gap-2 text-sm text-neutral-500">
+									<Icon name="loader" spin />
+									Loading tracks…
+								</p>
+							) : tracks.error ? (
+								<p role="alert" className="mt-3 text-sm text-red-600">
+									{mask.text(errorMessage(tracks.error))}
+								</p>
+							) : combined ? (
+								<TrackOverview summary={combined} episodes={episodeSummaries} />
+							) : (
+								<p className="mt-3 text-sm text-neutral-500">
+									Choose episodes to preview their tracks.
+								</p>
+							)}
+							{stale && !tracks.isPending && (
+								<p className="mt-2 text-xs text-accent-600">
+									Selection changed. Refresh selected tracks to update the preview.
+								</p>
+							)}
+						</Card>
+						<Card className="p-4">
+							<h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
+								Download settings
+							</h2>
+							{combined ? (
+								<div className="mt-3 space-y-3">
+									<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+										<ChipSelect
+											label="Quality"
+											emptyHint="best available"
+											selected={qualitySel}
+											onChange={setQualitySel}
+											options={combined.heights.map((h) => ({ value: String(h), label: `${h}p` }))}
+										/>
+										<ChipSelect
+											label="Video codec"
+											emptyHint="any"
+											selected={codecSel}
+											onChange={setCodecSel}
+											options={CODECS.map((c) => ({ value: c, label: c }))}
+										/>
+										<ChipSelect
+											label="Range"
+											emptyHint="SDR"
+											selected={rangeSel}
+											onChange={setRangeSel}
+											options={RANGES.map((r) => ({ value: r, label: r }))}
+										/>
+										{combined.audioLangs.length > 0 && (
+											<ChipSelect
+												label="Audio"
+												emptyHint="original"
+												selected={audioSel}
+												onChange={setAudioSel}
+												options={combined.audioLangs.map((l) => ({
+													value: l,
+													label: originalLangs.includes(l) ? `${l} (original)` : l
+												}))}
+											/>
+										)}
+										{combined.subLangs.length > 0 && (
+											<ChipSelect
+												label="Subtitles"
+												emptyHint="all"
+												selected={subSel}
+												onChange={setSubSel}
+												options={combined.subLangs.map((l) => ({ value: l, label: l }))}
+											/>
+										)}
+									</div>
+									<div className="grid gap-2 sm:grid-cols-2">
+										{svcFields.length > 0 && (
+											<OptionForm
+												title={`${mask.service(service)} options`}
+												fields={svcFields}
+												values={svcValues}
+												onChange={setSvcValues}
+											/>
+										)}
+
+										<OptionForm
+											title="Advanced options"
+											fields={advancedFields}
+											values={advanced}
+											onChange={setAdvanced}
+										/>
+									</div>
+									<div className="flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-3 dark:border-neutral-700">
+										{episodic && (
+											<span className="mr-auto text-xs text-neutral-500">
+												{selected.length} episodes selected
+											</span>
+										)}
+										<Button
+											onClick={() => start.mutate()}
+											disabled={
+												start.isPending ||
+												refreshStatus.isPending ||
+												tracks.isPending ||
+												!!tracks.error ||
+												(episodic ? !selected.length : !first || !canSelectTitle(first))
+											}
+											className="w-full sm:w-auto"
+										>
+											{start.isPending ? (
+												<>
+													<Icon name="loader" spin />
+													Starting…
+												</>
+											) : (
+												<>
+													<Icon name="download" />
+													Start download
+												</>
+											)}
+										</Button>
+
+										{/* Series only: the tracking routes reject every other kind. */}
+										{episodic &&
+											episodeOptions.length > 0 &&
+											(tracked ? (
+												<Button
+													variant="secondary"
+													onClick={() => navigate({ to: '/tracking' })}
+													className="w-full sm:w-auto"
+												>
+													<Icon name="bell" />
+													Tracked
+													{tracked.unseen > 0 && ` · ${tracked.unseen} new`}
+												</Button>
+											) : (
+												<Button
+													variant="secondary"
+													onClick={() => setTrackOpen(true)}
+													className="w-full sm:w-auto"
+												>
+													<Icon name="bell" />
+													Track
+												</Button>
+											))}
+									</div>
+								</div>
+							) : (
+								<div className="mt-4 flex items-center gap-2 py-4 text-sm text-neutral-400 dark:text-neutral-500">
+									{tracks.isPending ? (
+										<>
+											<Icon name="loader" spin /> Loading tracks…
+										</>
+									) : first && !canSelectTitle(first) ? (
+										'This account does not have access to this title.'
+									) : (
+										'Select an episode to load tracks.'
+									)}
+								</div>
+							)}
+
+							{start.error && (
+								<div className="mt-4 flex items-start gap-2 text-sm text-red-600 dark:text-red-400">
+									<Icon name="alert" size={16} className="mt-0.5" />
+									<span>{mask.text(errorMessage(start.error))}</span>
+								</div>
+							)}
+						</Card>
 						{episodic && episodeOptions.length > 0 && (
-							<Card className="p-5">
+							<Card className="p-4 sm:p-5">
 								<EpisodePicker
 									titles={episodeTitles}
 									selected={selected}
@@ -395,14 +577,6 @@ function TitlePage() {
 									>
 										{refreshStatus.isPending ? 'Refreshing availability…' : 'Refresh availability'}
 									</button>
-									<button
-										type="button"
-										onClick={loadSelection}
-										disabled={tracks.isPending || !selected.length}
-										className="text-accent-600 disabled:opacity-40"
-									>
-										Refresh selected tracks
-									</button>
 								</div>
 								{refreshStatus.error && (
 									<p role="alert" className="mt-2 text-sm text-red-600">
@@ -416,240 +590,9 @@ function TitlePage() {
 										the whole episode.
 									</p>
 								)}
-								{stale && !tracks.isPending && (
-									<p className="mt-2 text-xs text-accent-600 dark:text-accent-400">
-										Selection changed. Click "Refresh selection" to update available tracks.
-									</p>
-								)}
 							</Card>
 						)}
-
-						<Card className="p-5">
-							<div className="flex items-center justify-between">
-								<h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-									Available tracks
-								</h2>
-								{episodic && trackResults.length > 0 && (
-									<span className="text-xs text-neutral-400">
-										{trackResults.length} {trackResults.length === 1 ? 'episode' : 'episodes'}
-									</span>
-								)}
-							</div>
-							{first && !canSelectTitle(first) ? (
-								<p role="status" className="mt-3 text-sm text-red-600">
-									This account does not have access to this title.
-								</p>
-							) : tracks.isPending ? (
-								<div className="flex items-center gap-2 py-8 text-sm text-neutral-500 dark:text-neutral-400">
-									<Icon name="loader" spin /> Loading tracks…
-								</div>
-							) : tracks.error ? (
-								<div className="flex items-start gap-2 py-4 text-sm text-red-600 dark:text-red-400">
-									<Icon name="alert" size={16} className="mt-0.5" />
-									<span>{mask.text(errorMessage(tracks.error))}</span>
-								</div>
-							) : episodeSummaries.length > 0 ? (
-								<div className="mt-3 max-h-96 space-y-4 overflow-y-auto pr-1">
-									{episodeSummaries.map((e) => (
-										<div
-											key={e.code ?? e.name}
-											className="border-t border-neutral-100 pt-3 first:border-0 first:pt-0 dark:border-neutral-800"
-										>
-											{e.code && (
-												<p className="text-xs font-semibold text-neutral-700 dark:text-neutral-200">
-													{e.code} · {mask.title(e.name)}
-												</p>
-											)}
-											<dl className="mt-1.5 space-y-2 text-sm">
-												<div className="flex flex-wrap items-center gap-1.5">
-													<dt className="w-16 shrink-0 text-xs font-medium text-neutral-500">
-														Video
-													</dt>
-													{e.summary.heights.map((h) => (
-														<Badge key={h}>{h}p</Badge>
-													))}
-													{e.summary.ranges.map((r) => (
-														<Badge key={r} tone="violet">
-															{r}
-														</Badge>
-													))}
-													{e.summary.vcodecs.map((c) => (
-														<Badge key={c} tone="neutral">
-															{c}
-														</Badge>
-													))}
-												</div>
-												<div className="flex flex-wrap items-center gap-1.5">
-													<dt className="w-16 shrink-0 text-xs font-medium text-neutral-500">
-														Audio
-													</dt>
-													<Badge tone="accent">{e.summary.audioLangs.length} langs</Badge>
-													{e.summary.audioCodecs.map((c) => (
-														<Badge key={c}>{c}</Badge>
-													))}
-													{e.summary.atmos && <Badge tone="amber">Atmos</Badge>}
-												</div>
-												<div className="flex flex-wrap items-center gap-1.5">
-													<dt className="w-16 shrink-0 text-xs font-medium text-neutral-500">
-														Subs
-													</dt>
-													<Badge tone="accent">{e.summary.subLangs.length} langs</Badge>
-												</div>
-											</dl>
-										</div>
-									))}
-								</div>
-							) : (
-								<p className="py-6 text-sm text-neutral-400 dark:text-neutral-500">
-									No tracks loaded. Pick episodes and click "Refresh selection".
-								</p>
-							)}
-						</Card>
 					</div>
-
-					<Card className="mt-6 p-5">
-						<h2 className="text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-							Download
-						</h2>
-						<p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-							Click to pick tracks. An empty row uses the default next to its label.
-						</p>
-						{combined ? (
-							<div className="mt-4 space-y-4">
-								<div className="grid gap-4 sm:grid-cols-2">
-									<ChipSelect
-										label="Quality"
-										emptyHint="best available"
-										selected={qualitySel}
-										onChange={setQualitySel}
-										options={combined.heights.map((h) => ({ value: String(h), label: `${h}p` }))}
-									/>
-									<ChipSelect
-										label="Video codecs"
-										emptyHint="any"
-										selected={codecSel}
-										onChange={setCodecSel}
-										options={CODECS.map((c) => ({ value: c, label: c }))}
-									/>
-								</div>
-								<div className="grid gap-4 sm:grid-cols-2">
-									<ChipSelect
-										label="Range"
-										emptyHint="SDR"
-										selected={rangeSel}
-										onChange={setRangeSel}
-										options={RANGES.map((r) => ({ value: r, label: r }))}
-									/>
-									{combined.audioLangs.length > 0 && (
-										<ChipSelect
-											label="Audio languages"
-											emptyHint="original language"
-											selected={audioSel}
-											onChange={setAudioSel}
-											options={combined.audioLangs.map((l) => ({
-												value: l,
-												label: originalLangs.includes(l) ? `${l} (original)` : l
-											}))}
-										/>
-									)}
-								</div>
-								{combined.subLangs.length > 0 && (
-									<ChipSelect
-										label="Subtitle languages"
-										emptyHint="all"
-										selected={subSel}
-										onChange={setSubSel}
-										options={combined.subLangs.map((l) => ({ value: l, label: l }))}
-									/>
-								)}
-
-								{svcFields.length > 0 && (
-									<OptionForm
-										title={`${mask.service(service)} options`}
-										fields={svcFields}
-										values={svcValues}
-										onChange={setSvcValues}
-									/>
-								)}
-
-								<OptionForm
-									title="Advanced options"
-									fields={advancedFields}
-									values={advanced}
-									onChange={setAdvanced}
-								/>
-
-								<div className="flex flex-wrap items-center gap-2">
-									<Button
-										onClick={() => start.mutate()}
-										disabled={
-											start.isPending ||
-											refreshStatus.isPending ||
-											tracks.isPending ||
-											!!tracks.error ||
-											(episodic ? !selected.length : !first || !canSelectTitle(first))
-										}
-										className="w-full sm:w-auto"
-									>
-										{start.isPending ? (
-											<>
-												<Icon name="loader" spin />
-												Starting…
-											</>
-										) : (
-											<>
-												<Icon name="download" />
-												Start download
-											</>
-										)}
-									</Button>
-
-									{/* Series only: the tracking routes reject every other kind. */}
-									{episodic &&
-										episodeOptions.length > 0 &&
-										(tracked ? (
-											<Button
-												variant="secondary"
-												onClick={() => navigate({ to: '/tracking' })}
-												className="w-full sm:w-auto"
-											>
-												<Icon name="bell" />
-												Tracked
-												{tracked.unseen > 0 && ` · ${tracked.unseen} new`}
-											</Button>
-										) : (
-											<Button
-												variant="secondary"
-												onClick={() => setTrackOpen(true)}
-												className="w-full sm:w-auto"
-											>
-												<Icon name="bell" />
-												Track
-											</Button>
-										))}
-								</div>
-							</div>
-						) : (
-							<div className="mt-4 flex items-center gap-2 py-4 text-sm text-neutral-400 dark:text-neutral-500">
-								{tracks.isPending ? (
-									<>
-										<Icon name="loader" spin /> Loading tracks…
-									</>
-								) : first && !canSelectTitle(first) ? (
-									'This account does not have access to this title.'
-								) : (
-									'Select an episode to load tracks.'
-								)}
-							</div>
-						)}
-
-						{start.error && (
-							<div className="mt-4 flex items-start gap-2 text-sm text-red-600 dark:text-red-400">
-								<Icon name="alert" size={16} className="mt-0.5" />
-								<span>{mask.text(errorMessage(start.error))}</span>
-							</div>
-						)}
-					</Card>
 				</>
 			)}
 
